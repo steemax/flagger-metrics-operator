@@ -1,0 +1,50 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: flagger-metrics-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Template is the Schema for the templates API
+      displayName: Template
+      kind: Template
+      name: templates.flagger.3rd.io
+      version: v1
+  description: Control basic metric templates in Canary per NS
+  displayName: flagger-metrics-operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - Kubernetes Operator
+  - Flagger
+  - MetricTemplates
+  links:
+  - name: Flagger Metrics Operator
+    url: https://flagger-metrics-operator.domain
+  maintainers:
+  - email: politem@gmail.com
+    name: paa
+  maturity: alpha
+  provider:
+    name: github.com/steemax/flagger-metrics-operator
+    url: github.com/steemax/flagger-metrics-operator
+  version: 0.0.0

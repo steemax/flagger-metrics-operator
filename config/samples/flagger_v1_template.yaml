@@ -1,0 +1,20 @@
+apiVersion: flagger.3rd.io/v1
+kind: Template
+metadata:
+  labels:
+    app.kubernetes.io/name: template
+    app.kubernetes.io/instance: template-sample
+    app.kubernetes.io/part-of: flagger-metrics-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: flagger-metrics-operator
+  name: basic
+spec:
+  namespaces: 
+  - name: default
+    interval: 1m
+    thresholdRange:
+      max: 50
+  - name: paa
+    interval: 1m
+    thresholdRange:
+      max: 10
