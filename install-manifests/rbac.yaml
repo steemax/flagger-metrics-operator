@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flagger-operator
+  namespace: wbpay
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flagger-operator-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["flagger.app"]
+  resources: ["canaries", "metrictemplates"]
+  verbs: ["*"]
+- apiGroups: ["flagger.3rd.io"]
+  resources: ["templates"]
+  verbs: ["*"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flagger-operator-cluster-role-binding
+subjects:
+- kind: ServiceAccount
+  name: flagger-operator
+  namespace: wbpay
+roleRef:
+  kind: ClusterRole
+  name: flagger-operator-cluster-role
+  apiGroup: rbac.authorization.k8s.io

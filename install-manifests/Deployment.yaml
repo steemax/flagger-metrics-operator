@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flagger-operator-template
+  namespace: wbpay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flagger-operator-template
+  template:
+    metadata:
+      labels:
+        app: flagger-operator-template
+    spec:
+      serviceAccountName: flagger-operator
+      containers:
+      - name: flagger-operator-template
+        image: steemax/flagger-operator:v1.0.1
+        resources:
+          requests:
+            cpu: 50m
+            memory: 50Mi
+          limits:
+            cpu: 200m
+            memory: 200Mi
