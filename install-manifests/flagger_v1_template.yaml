@@ -8,10 +8,16 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: flagger-metrics-operator
   name: basic
-  namespace: wbpay
+  namespace: default
 spec:
-  namespaces: 
-  - name: wbpay
-    interval: 1m
-    thresholdRange:
-      max: 6
+  namespaces:
+  - name: default
+    metricTemplates:
+    - name: nginx-template-testing
+      interval: 2m
+      thresholdRange:
+        max: 5
+    - name: new-testing
+      interval: 2m
+      thresholdRange:
+        max: 5

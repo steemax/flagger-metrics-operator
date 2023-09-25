@@ -103,6 +103,6 @@ func UpdateInfoPeriodically() {
 		}
 		os.Stdout.Sync() // Принудительная синхронизация вывода
 		// Пауза на 1 минуту перед следующим вызовом
-		time.Sleep(3 * time.Minute)
+		time.Sleep(1 * time.Minute)
 	}
 }

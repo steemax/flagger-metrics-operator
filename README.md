@@ -84,16 +84,54 @@ metadata:
   uid: b89d4797-7378-496f-9845-7ba86b1c017e
 spec:
   namespaces:
-  - interval: 5m
-    name: default
-    thresholdRange:
-      min: 58
-  - interval: 1m
-    name: paa
-    thresholdRange:
-      min: 10
+  - name: default
+    metricTemplates:
+    - name: nginx-template-testing
+      interval: 2m
+      thresholdRange:
+        max: 5
+    - name: new-testing
+      interval: 1m
+      thresholdRange:
+        max: 60
  ```
 Добавление полей или изменение их именования - приведет к тому что синтаксис не пройдет валидацию и манифест не будет применен к кластеру. Как видно из примера, конфигурация может быть описана для каждого Namespace в кластере или только для одного. В зависимости от прав (RBAC) для Service Account из под которого запущен оператор, можно управлять  настройками как для всех Namespace так и только для одного. 
+
+## Пример записываемого лога
+```log
+2023/09/25 18:54:30 Updater: Update cache information about MetricTemplates in cluster scope:
+2023/09/25 18:54:30 Updater: NameTpl: new-testing, Namespace: default, LabelHave: true
+2023/09/25 18:54:30 Updater: NameTpl: nginx-template-testing, Namespace: default, LabelHave: true
+2023/09/25 18:54:30 CanaryReconciler: Detect Modify request for Canary : nginx-deployment, in namespace: default, sleep 10 seconds...
+2023/09/25 18:54:30 TemplateReconciler: Detect Modify request for templates.flagger.3rd.io :basic, in namespace: default
+2023/09/25 18:54:30 MetricTemplateReconciler: Detect Update or Create request for flagger metricTemplate: new-testing, in namespace: default
+2023/09/25 18:54:30 MetricTemplateReconciler: Modified metricTemplate has BASE label, updating Canary resources
+2023/09/25 18:54:30 MetricTemplateReconciler: match found for triggeres MetricTemplate with templates.flagger.3rd.io basic, is the metric name: new-testing namespace: default
+2023/09/25 18:54:30 TemplateReconciler: No need update for Canary nginx-deployment (new-testing), skip updating...
+2023/09/25 18:54:30 TemplateReconciler: No need update for Canary nginx-deployment (nginx-template-testing), skip updating...
+2023/09/25 18:54:30 MetricTemplateReconciler: No need update for Canary nginx-deployment (new-testing)  skip updating...
+2023/09/25 18:54:30 MetricTemplateReconciler: Detect Update or Create request for flagger metricTemplate: nginx-template-testing, in namespace: default
+2023/09/25 18:54:30 MetricTemplateReconciler: Modified metricTemplate has BASE label, updating Canary resources
+2023/09/25 18:54:30 MetricTemplateReconciler: match found for triggeres MetricTemplate with templates.flagger.3rd.io basic, is the metric name: nginx-template-testing namespace: default
+2023/09/25 18:54:30 MetricTemplateReconciler: No need update for Canary nginx-deployment (nginx-template-testing)  skip updating...
+2023/09/25 18:54:30 MetricTemplateReconciler: Detect Update or Create request for flagger metricTemplate: metric-nginx-template, in namespace: default
+2023/09/25 18:54:30 MetricTemplateReconciler: Updated MetricTemplate metric-nginx-templatein namespace: default NOT base metric template, skipping update Canary Analisys...
+
+2023/09/25 18:54:40 CanaryReconciler: Canary nginx-deployment in Namespace default modified, now check base MetricTemplate is correct...
+2023/09/25 18:54:40 CanaryReconciler: No need update for Canary nginx-deployment (new-testing), skip updating...
+2023/09/25 18:54:40 CanaryReconciler: No need update for Canary nginx-deployment (nginx-template-testing), skip updating...
+
+2023/09/25 18:55:31 Updater: Update cache information about MetricTemplates in cluster scope:
+2023/09/25 18:55:31 Updater: NameTpl: new-testing, Namespace: default, LabelHave: true
+2023/09/25 18:55:31 Updater: NameTpl: nginx-template-testing, Namespace: default, LabelHave: true
+2023/09/25 18:55:52 MetricTemplateReconciler: Detect Update or Create request for flagger metricTemplate: new-testing-1, in namespace: default
+2023/09/25 18:55:52 MetricTemplateReconciler: Modified metricTemplate has BASE label, updating Canary resources
+2023/09/25 18:55:52 MetricTemplateReconciler: You need add description for MetricTemplate name: new-testing-1 to templates.flagger.3rd.io basic, now this base metric template is available, but not described (interval and threshhold range), skip update in Canary
+
+2023/09/25 18:56:31 Updater: Update cache information about MetricTemplates in cluster scope:
+2023/09/25 18:56:31 Updater: NameTpl: new-testing, Namespace: default, LabelHave: true
+2023/09/25 18:56:31 Updater: NameTpl: new-testing-1, Namespace: default, LabelHave: true
+2023/09/25 18:56:31 Updater: NameTpl: nginx-template-testing, Namespace: default, LabelHave: true```
 
 ## License
 

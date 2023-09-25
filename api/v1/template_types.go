@@ -28,7 +28,19 @@ type TemplateSpec struct {
 	Namespaces []NamespaceSpec `json:"namespaces,omitempty"`
 }
 
+/*
+	type NamespaceSpec struct {
+		Name           string         `json:"name,omitempty"`
+		Interval       string         `json:"interval,omitempty"`
+		ThresholdRange ThresholdRange `json:"thresholdRange,omitempty"`
+	}
+*/
 type NamespaceSpec struct {
+	Name            string           `json:"name,omitempty"`
+	MetricTemplates []MetricTemplate `json:"metricTemplates,omitempty"`
+}
+
+type MetricTemplate struct {
 	Name           string         `json:"name,omitempty"`
 	Interval       string         `json:"interval,omitempty"`
 	ThresholdRange ThresholdRange `json:"thresholdRange,omitempty"`
