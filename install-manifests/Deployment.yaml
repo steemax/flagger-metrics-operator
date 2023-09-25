@@ -16,7 +16,7 @@ spec:
       serviceAccountName: flagger-operator
       containers:
       - name: flagger-operator-template
-        image: steemax/flagger-operator:v1.0.1
+        image: steemax/flagger-operator:v1.2.8
         resources:
           requests:
             cpu: 50m

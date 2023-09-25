@@ -36,15 +36,22 @@ spec:
               namespaces:
                 items:
                   properties:
-                    interval:
-                      type: string
                     name:
                       type: string
-                    thresholdRange:
-                      properties:
-                        max:
-                          type: number
-                      type: object
+                    metricTemplates:
+                      items:
+                        properties:
+                          interval:
+                            type: string
+                          thresholdRange:
+                            properties:
+                              max:
+                                type: number
+                            type: object
+                          name:
+                            type: string
+                        type: object
+                      type: array
                   type: object
                 type: array
             type: object

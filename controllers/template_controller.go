@@ -55,7 +55,12 @@ type CanaryReconciler struct {
 }
 
 type AnalysisBasic struct {
-	Namespace    string
+	Namespace          string
+	MetricTemplateName []MetricTemplateInfo
+}
+
+type MetricTemplateInfo struct {
+	TemplateName string
 	Interval     string
 	ThresholdMin float64
 }
@@ -163,113 +168,114 @@ func (r *MetricTemplateReconciler) handleCreationOrUpdate(ctx context.Context, m
 
 		// Проверяем, что имя объекта равно "basic, как темплейт для базовых метрик"
 		if template.Name != "basic" {
-			// Если имя не равно "basic", сворачиваемся
 			return ctrl.Result{}, nil
 		}
 
 		for _, namespaceSpec := range template.Spec.Namespaces {
-			data := AnalysisBasic{
-				Namespace:    namespaceSpec.Name,
-				Interval:     namespaceSpec.Interval,
-				ThresholdMin: namespaceSpec.ThresholdRange.Max,
-			}
-			analysisData = append(analysisData, data)
-		}
-		for _, analysis := range analysisData {
-			// Устанавливаем параметры для поиска в конкретном пространстве имен
-			listOpts := &client.ListOptions{Namespace: analysis.Namespace}
-
-			// Получаем все объекты MetricTemplate в данном пространстве имен
-			if err := r.Client.List(ctx, &metricTemplates, listOpts); err != nil {
-				return ctrl.Result{}, err
+			if namespaceSpec.Name != metricTemplate.Namespace {
+				// Пропускать неймспейсы, которые не соответствуют неймспейсу сработавшего события
+				continue
 			}
 
-			// Получили список всех MetricTemplate в текущем НС
-			// Фильтруем по лейблу base: true
-			// Создаем новый список для фильтрованных MetricTemplate
-			filteredMetricTemplates := []flaggerv1beta1.MetricTemplate{}
+			// Получаем имя метриктемплейта из metricTemplate
+			metricTemplateName := metricTemplate.Name
+			var hasBaseLabel bool
 
-			// Фильтруем MetricTemplate и добавляем только те, у которых метка "base" равна "true"
-			for _, mt := range metricTemplates.Items {
-				if mt.Labels["base"] == "true" {
-					filteredMetricTemplates = append(filteredMetricTemplates, mt)
+			if metricTemplate.Labels != nil && metricTemplate.Labels["base"] == "true" {
+				log.Print("MetricTemplateReconciler: Modified metricTemplate has BASE label, updating Canary resources")
+				hasBaseLabel = true
+
+			}
+
+			if hasBaseLabel {
+				// Получаем данные (Interval и ThresholdMin) для данного метриктемплейта из templates.flagger.3rd.io basic
+				var interval string
+				var thresholdMin float64
+				for _, mtInfo := range namespaceSpec.MetricTemplates {
+					if mtInfo.Name == metricTemplateName {
+						log.Print("MetricTemplateReconciler: match found for triggeres MetricTemplate with templates.flagger.3rd.io basic, is the metric name: ", metricTemplateName, " namespace: ", metricTemplate.Namespace)
+						interval = mtInfo.Interval
+						thresholdMin = mtInfo.ThresholdRange.Max
+						break
+					}
 				}
-			}
 
-			// metricTemplates.Items для обработки каждого объекта по отдельности.
-			for _, mt := range filteredMetricTemplates {
-				// Устанавливаем параметры для поиска в конкретном НС
-				//log.Print(fmt.Sprintf("check metricTemplate %v in canary specs", mt)) // лог для дебага, удалить позже
-				listOpts := &client.ListOptions{Namespace: analysis.Namespace}
+				if interval == "" {
+					log.Print("MetricTemplateReconciler: You need add description for MetricTemplate name: ", metricTemplateName, " to templates.flagger.3rd.io basic, now this base metric template is available, but not described (interval and threshhold range), skip update in Canary")
+					continue
+				}
 
-				// Получаем все объекты Canary в НС
+				// Получаем список всех Canary в текущем НС
+				listOpts := &client.ListOptions{Namespace: metricTemplate.Namespace}
 				if err := r.Client.List(ctx, &canaries, listOpts); err != nil {
 					return ctrl.Result{}, err
 				}
 
-				// Получили список всех Canary в текущем НС.
+				// Обходим все Canary в текущем НС
 				for _, canary := range canaries.Items {
-					needUpdate := false
 					if canary.Spec.Analysis == nil {
 						canary.Spec.Analysis = &flaggerv1beta1.CanaryAnalysis{}
 					}
 					if canary.Spec.Analysis.Metrics == nil {
 						canary.Spec.Analysis.Metrics = []flaggerv1beta1.CanaryMetric{}
 					}
-					for _, mt := range filteredMetricTemplates {
-						needUpdate = false
-						found := false
-						// Ищем соответствующий элемент в Canary metrics
-						for i, metric := range canary.Spec.Analysis.Metrics {
-							if metric.Name == mt.Name {
-								found = true
-								// Проверяем, что metric.Interval не nil и сравниваем значение
-								if metric.Interval != analysis.Interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != analysis.ThresholdMin) {
-									canary.Spec.Analysis.Metrics[i].Interval = analysis.Interval
-									canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &analysis.ThresholdMin
-									needUpdate = true
-								}
-								//needUpdate = false
-								break
-							}
-						}
 
-						if !found {
-							needUpdate = true
-							newMetric := flaggerv1beta1.CanaryMetric{
-								Name:     mt.Name,
-								Interval: analysis.Interval,
-								ThresholdRange: &flaggerv1beta1.CanaryThresholdRange{
-									Max: &analysis.ThresholdMin,
-								},
-								TemplateRef: &flaggerv1beta1.CrossNamespaceObjectReference{
-									Name: mt.Name,
-								},
+					needUpdate := false
+					found := false
+
+					// Ищем соответствующий элемент в Canary metrics
+					for i, metric := range canary.Spec.Analysis.Metrics {
+						if metric.Name == metricTemplateName {
+							found = true
+							// Проверяем, что metric.Interval и thresholdMin совпадают с данными из analysis
+							if metric.Interval != interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != thresholdMin) {
+								canary.Spec.Analysis.Metrics[i].Interval = interval
+								canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &thresholdMin
+								needUpdate = true
 							}
-							canary.Spec.Analysis.Metrics = append(canary.Spec.Analysis.Metrics, newMetric)
+							break
 						}
 					}
+
+					if !found {
+						needUpdate = true
+						newMetric := flaggerv1beta1.CanaryMetric{
+							Name:     metricTemplateName,
+							Interval: interval,
+							ThresholdRange: &flaggerv1beta1.CanaryThresholdRange{
+								Max: &thresholdMin,
+							},
+							TemplateRef: &flaggerv1beta1.CrossNamespaceObjectReference{
+								Name: metricTemplateName,
+							},
+						}
+						canary.Spec.Analysis.Metrics = append(canary.Spec.Analysis.Metrics, newMetric)
+					}
+
 					if needUpdate {
 						// Применяем обновления только когда необходимо
-						log.Print("MetricTemplateReconciler: Need update for Canary ", canary.Name, " (", mt.Name, ") ", "start updating...")
+						log.Print("MetricTemplateReconciler: Need update for Canary ", canary.Name, " (", metricTemplateName, ") ", "start updating...")
 						if err := r.Client.Update(ctx, &canary); err != nil {
 							return ctrl.Result{}, err
 						}
-						log.Print("MetricTemplateReconciler: Update for Canary ", canary.Name, " (", mt.Name, ") ", "finished...")
+						log.Print("MetricTemplateReconciler: Update for Canary ", canary.Name, " (", metricTemplateName, ") ", "finished...")
 					} else {
-						log.Print("MetricTemplateReconciler: No need update for Canary ", canary.Name, " (", mt.Name, ") ", " skip updating...")
+						log.Print("MetricTemplateReconciler: No need update for Canary ", canary.Name, " (", metricTemplateName, ") ", " skip updating...")
 					}
 				}
+			} else {
+				log.Print("MetricTemplateReconciler: Updated MetricTemplate ", metricTemplateName, "in namespace: ", metricTemplate.Namespace, " NOT base metric template, skipping update Canary Analisys...")
 			}
 		}
-
 	}
+
+	// ...
 	return ctrl.Result{}, nil
 }
 
 func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	template := &flaggerv1.Template{}
-	log.Print("TemplateReconciler: Detect Modify request for templates.flagger.3rd.io : ", req.NamespacedName.Name, ", in namespace: ", req.NamespacedName.Namespace)
+	log.Print("TemplateReconciler: Detect Modify request for templates.flagger.3rd.io :", req.NamespacedName.Name, ", in namespace: ", req.NamespacedName.Namespace)
 	// Проверяем наличие объекта Template
 	if err := r.Client.Get(ctx, req.NamespacedName, template); err != nil {
 		if !errors.IsNotFound(err) {
@@ -286,12 +292,20 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		analysisData = nil
 		for _, namespaceSpec := range template.Spec.Namespaces {
-			data := AnalysisBasic{
-				Namespace:    namespaceSpec.Name,
-				Interval:     namespaceSpec.Interval,
-				ThresholdMin: namespaceSpec.ThresholdRange.Max,
+			analysis := AnalysisBasic{
+				Namespace:          namespaceSpec.Name,
+				MetricTemplateName: make([]MetricTemplateInfo, len(namespaceSpec.MetricTemplates)),
 			}
-			analysisData = append(analysisData, data)
+
+			for i, metricTemplate := range namespaceSpec.MetricTemplates {
+				analysis.MetricTemplateName[i] = MetricTemplateInfo{
+					TemplateName: metricTemplate.Name,
+					Interval:     metricTemplate.Interval,
+					ThresholdMin: metricTemplate.ThresholdRange.Max,
+				}
+			}
+
+			analysisData = append(analysisData, analysis)
 		}
 
 		for _, analysis := range analysisData {
@@ -316,7 +330,6 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			}
 			for _, mt := range filteredMetricTemplates {
 				// Устанавливаем параметры для поиска в конкретном НС
-				//log.Print(fmt.Sprintf("check metricTemplate %v in canary specs", mt)) // лог для дебага, удалить позже
 				listOpts := &client.ListOptions{Namespace: analysis.Namespace}
 
 				// Получаем все объекты Canary в НС
@@ -325,7 +338,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				}
 
 				// Получили список всех Canary в текущем НС.
-				// canaries.Items для обработки каждого объектва по отдельности.
+				// canaries.Items для обработки каждого объекта по отдельности.
 				for _, canary := range canaries.Items {
 					needUpdate := false
 					// Проверяем наличие секции analysis и metrics
@@ -335,17 +348,31 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 					if canary.Spec.Analysis.Metrics == nil {
 						canary.Spec.Analysis.Metrics = []flaggerv1beta1.CanaryMetric{}
 					}
-					for _, mt := range filteredMetricTemplates {
+					for _, analysisMetric := range analysis.MetricTemplateName {
+						// Создаем ключ для проверки что метрик темплейт из Template существует в кластере как Флаггер Метрик Темплейт
+						metricTemplateKey := client.ObjectKey{
+							Namespace: analysis.Namespace,
+							Name:      analysisMetric.TemplateName,
+						}
+						metricTemplate := &flaggerv1beta1.MetricTemplate{}
+						if err := r.Client.Get(ctx, metricTemplateKey, metricTemplate); err != nil {
+							if errors.IsNotFound(err) {
+								// Метриктемплейт не существует в кластере
+								log.Print("MetricTemplateReconciler: MetricTemplate from Template, not found as Flagger MetricTemplate object: ", analysisMetric.TemplateName, " skip add to Canarys...")
+								continue // следующий цикл
+							}
+							return ctrl.Result{}, err
+						}
 						needUpdate = false
 						found := false
 						// Ищем соответствующий элемент в Canary metrics
 						for i, metric := range canary.Spec.Analysis.Metrics {
-							if metric.Name == mt.Name {
+							if metric.Name == analysisMetric.TemplateName {
 								found = true
 								// Проверяем, что metric.Interval не nil и сравниваем значение
-								if metric.Interval != analysis.Interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != analysis.ThresholdMin) {
-									canary.Spec.Analysis.Metrics[i].Interval = analysis.Interval
-									canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &analysis.ThresholdMin
+								if metric.Interval != analysisMetric.Interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != analysisMetric.ThresholdMin) {
+									canary.Spec.Analysis.Metrics[i].Interval = analysisMetric.Interval
+									canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &analysisMetric.ThresholdMin
 									needUpdate = true
 								}
 								//needUpdate = false
@@ -356,13 +383,13 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 						if !found {
 							needUpdate = true
 							newMetric := flaggerv1beta1.CanaryMetric{
-								Name:     mt.Name,
-								Interval: analysis.Interval,
+								Name:     analysisMetric.TemplateName,
+								Interval: analysisMetric.Interval,
 								ThresholdRange: &flaggerv1beta1.CanaryThresholdRange{
-									Max: &analysis.ThresholdMin,
+									Max: &analysisMetric.ThresholdMin,
 								},
 								TemplateRef: &flaggerv1beta1.CrossNamespaceObjectReference{
-									Name: mt.Name,
+									Name: analysisMetric.TemplateName,
 								},
 							}
 							canary.Spec.Analysis.Metrics = append(canary.Spec.Analysis.Metrics, newMetric)
@@ -414,14 +441,26 @@ func (r *CanaryReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 				// Если имя не равно "basic", сворачиваемся
 				return ctrl.Result{}, nil
 			}
+			var analysisData []AnalysisBasic
 
 			for _, namespaceSpec := range template.Spec.Namespaces {
-				data := AnalysisBasic{
-					Namespace:    namespaceSpec.Name,
-					Interval:     namespaceSpec.Interval,
-					ThresholdMin: namespaceSpec.ThresholdRange.Max,
+				if namespaceSpec.Name == req.NamespacedName.Namespace {
+					analysis := AnalysisBasic{
+						Namespace:          namespaceSpec.Name,
+						MetricTemplateName: make([]MetricTemplateInfo, len(namespaceSpec.MetricTemplates)),
+					}
+
+					for i, metricTemplate := range namespaceSpec.MetricTemplates {
+						analysis.MetricTemplateName[i] = MetricTemplateInfo{
+							TemplateName: metricTemplate.Name,
+							Interval:     metricTemplate.Interval,
+							ThresholdMin: metricTemplate.ThresholdRange.Max,
+						}
+					}
+
+					analysisData = append(analysisData, analysis)
+					break // заполняем только для НС где произошло событие и прерываем заполнение
 				}
-				analysisData = append(analysisData, data)
 			}
 
 			for _, analysis := range analysisData {
@@ -447,48 +486,51 @@ func (r *CanaryReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 
 				// Выполнить логику для всех найденных MetricTemplate
 				for _, mt := range filteredMetricTemplates {
-					needUpdate := false
-					found := false
-					// Ищем соответствующий элемент в Canary metrics
-					for i, metric := range canary.Spec.Analysis.Metrics {
-						if metric.Name == mt.Name {
-							found = true
-							// Проверяем, что metric.Interval не nil и сравниваем значение
-							if metric.Interval != analysis.Interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != analysis.ThresholdMin) {
-								canary.Spec.Analysis.Metrics[i].Interval = analysis.Interval
-								canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &analysis.ThresholdMin
-								needUpdate = true
+					// проверяем что есть чем золнить данные из templates.flagger.3rd.io для этого метрикТемплейта
+					for _, mtInfo := range analysis.MetricTemplateName {
+						if mt.Name == mtInfo.TemplateName {
+							needUpdate := false
+							found := false
+							// Ищем соответствующий элемент в Canary metrics
+							for i, metric := range canary.Spec.Analysis.Metrics {
+								if metric.Name == mt.Name {
+									found = true
+									// Проверяем, что metric.Interval не nil и сравниваем значение
+									if metric.Interval != mtInfo.Interval || (metric.ThresholdRange.Max != nil && *metric.ThresholdRange.Max != mtInfo.ThresholdMin) {
+										canary.Spec.Analysis.Metrics[i].Interval = mtInfo.Interval
+										canary.Spec.Analysis.Metrics[i].ThresholdRange.Max = &mtInfo.ThresholdMin
+										needUpdate = true
+									}
+									break
+								}
 							}
-							//needUpdate = false
-							break
-						}
-					}
 
-					if !found {
-						needUpdate = true
-						newMetric := flaggerv1beta1.CanaryMetric{
-							Name:     mt.Name,
-							Interval: analysis.Interval,
-							ThresholdRange: &flaggerv1beta1.CanaryThresholdRange{
-								Max: &analysis.ThresholdMin,
-							},
-							TemplateRef: &flaggerv1beta1.CrossNamespaceObjectReference{
-								Name: mt.Name,
-							},
-						}
-						canary.Spec.Analysis.Metrics = append(canary.Spec.Analysis.Metrics, newMetric)
-					}
+							if !found {
+								needUpdate = true
+								newMetric := flaggerv1beta1.CanaryMetric{
+									Name:     mt.Name,
+									Interval: mtInfo.Interval,
+									ThresholdRange: &flaggerv1beta1.CanaryThresholdRange{
+										Max: &mtInfo.ThresholdMin,
+									},
+									TemplateRef: &flaggerv1beta1.CrossNamespaceObjectReference{
+										Name: mt.Name,
+									},
+								}
+								canary.Spec.Analysis.Metrics = append(canary.Spec.Analysis.Metrics, newMetric)
+							}
 
-					// Применяем обновления если есть изменения
-					if needUpdate {
-						log.Print("CanaryReconciler: Need update for Canary ", canary.Name, " (", mt.Name, ") ", "start updating...")
-						//canaryCopy := canary.DeepCopy()
-						if err := r.Client.Update(ctx, canary); err != nil {
-							return ctrl.Result{}, err
+							// Применяем обновления если есть изменения
+							if needUpdate {
+								log.Print("CanaryReconciler: Need update for Canary ", canary.Name, " (", mt.Name, ") ", "start updating...")
+								if err := r.Client.Update(ctx, canary); err != nil {
+									return ctrl.Result{}, err
+								}
+								log.Print("CanaryReconciler: Update for Canary ", canary.Name, " (", mt.Name, ") ", "finished...")
+							} else {
+								log.Print("CanaryReconciler: No need update for Canary ", canary.Name, " (", mt.Name, "), skip updating...")
+							}
 						}
-						log.Print("CanaryReconciler: Update for Canary ", canary.Name, " (", mt.Name, ") ", "finished...")
-					} else {
-						log.Print("CanaryReconciler: No need update for Canary ", canary.Name, " (", mt.Name, "), skip updating...")
 					}
 				}
 			}

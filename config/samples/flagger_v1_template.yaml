@@ -8,13 +8,16 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: flagger-metrics-operator
   name: basic
+  namespace: default
 spec:
-  namespaces: 
+  namespaces:
   - name: default
-    interval: 1m
-    thresholdRange:
-      max: 50
-  - name: paa
-    interval: 1m
-    thresholdRange:
-      max: 10
+    metricTemplates:
+    - name: nginx-template-testing
+      interval: 2m
+      thresholdRange:
+        max: 5
+    - name: new-testing
+      interval: 2m
+      thresholdRange:
+        max: 5
