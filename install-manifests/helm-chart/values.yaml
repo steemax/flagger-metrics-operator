@@ -1,0 +1,36 @@
+flaggerOperator:
+  enabled: true
+  namespace: flagger-metric-operator
+  serviceAccount:
+    annotations: {}
+    name: account
+  CRD:
+    create: true
+  templateResource:
+    create: true
+    namespace: {}
+    spec:
+      namespaces:
+        - metricTemplates:
+          - interval: "2m"
+            name: "nginx-template-testing"
+            thresholdRange:
+              max: 5
+          - interval: "1m"
+            name: "metric-template-next"
+            thresholdRange:
+              max: 15
+          name: "default"
+template:
+  flaggerOperatorTemplate:
+    image:
+      repository: steemax/flagger-operator
+      tag: v1.2.8
+    resources:
+      limits:
+        cpu: 200m
+        memory: 200Mi
+      requests:
+        cpu: 50m
+        memory: 50Mi
+  replicas: 1

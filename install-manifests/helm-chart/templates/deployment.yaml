@@ -1,0 +1,28 @@
+{{- if .Values.flaggerOperator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flagger-metrics-operator.fullname" . }}-template
+  namespace: {{ .Values.flaggerOperator.namespace | default .Release.Namespace }}
+  labels:
+  {{- include "flagger-metrics-operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.template.replicas }}
+  selector:
+    matchLabels:
+      app: flagger-operator-template
+    {{- include "flagger-metrics-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: flagger-operator-template
+      {{- include "flagger-metrics-operator.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: flagger-operator-template
+        image: {{ .Values.template.flaggerOperatorTemplate.image.repository }}:{{ .Values.template.flaggerOperatorTemplate.image.tag
+          | default .Chart.AppVersion }}
+        resources: {{- toYaml .Values.template.flaggerOperatorTemplate.resources | nindent
+          10 }}
+      serviceAccountName: {{ .Values.flaggerOperator.serviceAccount.name | default (printf "%s-flagger-operator" (include "flagger-metrics-operator.fullname" .)) }}
+{{- end }}
