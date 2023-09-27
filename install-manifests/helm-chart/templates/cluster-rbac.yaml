@@ -1,0 +1,30 @@
+{{- if .Values.flaggerOperator.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.flaggerOperator.serviceAccount.name | default (printf "%s-flagger-operator" (include "flagger-metrics-operator.fullname" .)) }}-cluster-role
+  labels:
+  {{- include "flagger-metrics-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - flagger.app
+  resources:
+  - canaries
+  - metrictemplates
+  verbs:
+  - '*'
+- apiGroups:
+  - flagger.3rd.io
+  resources:
+  - templates
+  verbs:
+  - '*'
+  {{- end }}

@@ -1,0 +1,13 @@
+{{- if and .Values.flaggerOperator.enabled .Values.flaggerOperator.templateResource.create }}
+apiVersion: flagger.3rd.io/v1
+kind: Template
+metadata:
+  name: basic
+  namespace: {{ .Values.flaggerOperator.templateResource.namespace | default .Values.flaggerOperator.namespace }}
+  labels:
+    app.kubernetes.io/created-by: flagger-metrics-operator
+    app.kubernetes.io/part-of: flagger-metrics-operator
+  {{- include "flagger-metrics-operator.labels" . | nindent 4 }}
+spec:
+  {{- toYaml .Values.flaggerOperator.templateResource.spec | nindent 2 }}
+{{- end }}

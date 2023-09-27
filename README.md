@@ -3,6 +3,13 @@
 
 Создан для автоматического управления базовыми метриками анализа (которые мы считаем обязательными для всех объектов Canary) в рамках Namespace, основываясь на Flagger MetricTemplates.
 
+### Установка
+
+1. Kubectl:
+   - cd ./install-manifests; kubectl apply -f ./*
+2. Helm:
+   - cd ./install-manifests/helm-chart; helm install flagger-template-operatot -f ./values.yaml ./
+
 ### Возможности
 
  1. Следит за MetricTemplates, с фильтром: 
